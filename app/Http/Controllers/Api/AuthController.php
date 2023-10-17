@@ -15,80 +15,63 @@ class AuthController extends Controller
     use HttpResponse;
 
     // Login API Function
-    public function login(LoginRequest $request) {
+    public function login(LoginRequest $request)
+    {
+        $credentials = $request->validated();
+
         try {
-            $credentials = $request->validated();
-            
-            if($credentials->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Validation error',
-                    'errors' => $credentials->errors()
-                ], 401);
+            if (!Auth::attempt($credentials)) {
+                return $this->error(null, 'Invalid credentials', 400);
             }
 
-            if(!Auth::attempt($credentials)) {
-                return $this->error('', 'Invalid Credentials', 401);
-            }
+            /** @var User $user */
+            $user = Auth::user();
 
-            $user = User::where('email', $request->email)->first();
-            return $this->success([
-                'user' => $user,
-                'token' => $user->createToken('API Token of ' . $user->name)->plainTextToken,
-            ]);
-            
+            return $this->onSuccessfulLogin($user);
         } catch (\Throwable $th) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $th->getMessage()
-            ], 500);
+            return $this->error(null, $th->getMessage(), 500);
         }
     }
-    
 
     // Signup APUI Function
-    public function register(SignupRequest $request) {
+    public function register(SignupRequest $request)
+    {
+        $credentials = $request->validated();
+
         try {
-            $credentials = $request->validated();
+            $credentials['password'] = bcrypt($request->password);
 
-            if($credentials->fails()) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Validation error',
-                    'errors' => $credentials->errors()
-                ], 401);
-            }
+            /** @var User $user */
+            $user = User::create($credentials);
 
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => $request->password
-            ]);
-
-            return $this->success([
-                'user' => $user,
-                'token' => $user->createToken('API Token of ' . $user->name)->plainTextToken,
-            ]);
-
-        }  catch (\Throwable $th) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $th->getMessage()
-            ], 500);
+            return $this->onSuccessfulLogin($user);
+        } catch (\Throwable $th) {
+            return $this->error(null, $th->getMessage(), 500);
         }
     }
-    
+
 
 
     // Logout function
-    public function logout(Request $req) {
+    public function logout(Request $req)
+    {
         $user = $req->user();
         $user->currentAccessToken()->delete();
-        return response()->json([
-            'status' => true,
-            'message' => 'User Successfully Logged Out'
-        ], 204);
+
+        return $this->success(null, 'User Successfully Logged Out', 204);
+        // return response()->json([
+        //     'status' => true,
+        //     'message' => 'User Successfully Logged Out',
+        // ], 204);
+    }
+
+    /**
+     * @return \Illuminate\Http\JsonResponse
+     */
+    protected function onSuccessfulLogin(User $user)
+    {
+        $token = $user->createToken('API Token of ' . $user->name)->plainTextToken;
+
+        return $this->success(compact('user', 'token'), 'Success');
     }
 }
